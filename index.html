@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ECE Verification Checker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 24px; font-family: Arial, sans-serif; }
+    main { display: flex; gap: 20px; max-width: 1100px; }
+    section { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    textarea, #output { width: 100%; min-height: 360px; padding: 12px; font: 16px/1.4 Arial, sans-serif; border: 1px solid #999; }
+    #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; }
+    button { width: fit-content; padding: 10px 16px; font-size: 16px; cursor: pointer; }
+    @media (max-width: 700px) { main { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <h1>ECE Verification Checker</h1>
+  <main>
+    <section>
+      <label for="input">Student submission</label>
+      <textarea id="input" placeholder="Describe your design, reasoning, or code structure here..."></textarea>
+      <button id="sendButton">Send to AI</button>
+    </section>
+    <section>
+      <label for="output">AI feedback</label>
+      <pre id="output">Submit your work to receive feedback.</pre>
+    </section>
+  </main>
+
+  <script>
+    // Replace this only after deploying your backend/serverless function.
+    const BACKEND_URL = "https://YOUR-BACKEND-URL/check";
+
+    const input = document.getElementById("input");
+    const output = document.getElementById("output");
+    const sendButton = document.getElementById("sendButton");
+
+    sendButton.addEventListener("click", async () => {
+      const studentWork = input.value.trim();
+      if (!studentWork) {
+        output.textContent = "Enter a submission first.";
+        return;
+      }
+
+      sendButton.disabled = true;
+      output.textContent = "Waiting for AI feedback...";
+
+      try {
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentWork })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "The backend returned an error.");
+        output.textContent = data.feedback;
+      } catch (error) {
+        output.textContent = `Error: ${error.message}`;
+      } finally {
+        sendButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
