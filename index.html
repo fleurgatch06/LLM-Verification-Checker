@@ -14,6 +14,9 @@
     #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; }
     button { width: fit-content; padding: 10px 16px; font-size: 16px; cursor: pointer; }
     small { max-width: 1100px; display: block; margin: 0 0 18px; }
+    details { border: 1px solid #999; padding: 10px 12px; }
+    summary { cursor: pointer; font-weight: bold; }
+    #systemPrompt { margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.4 Arial, sans-serif; }
     @media (max-width: 700px) { main { flex-direction: column; } }
   </style>
 </head>
@@ -28,6 +31,11 @@
       <label for="input">Student submission</label>
       <textarea id="input" placeholder="Describe your design, reasoning, or code structure here..."></textarea>
       <button id="sendButton">Send to AI</button>
+
+      <details>
+        <summary>Show system prompt</summary>
+        <pre id="systemPrompt"></pre>
+      </details>
     </section>
     <section>
       <label for="output">AI feedback</label>
@@ -37,16 +45,26 @@
 
   <script>
     const ARC_URL = "https://llm-api.arc.vt.edu/api/v1/chat/completions";
-    const MODEL = "gpt-oss-120b";
-    const SYSTEM_PROMPT = `You are an ECE project-design verification checker.
-Evaluate the student's reasoning or design structure. Do not provide a final
-solution or write the student's project for them. Give concise, constructive
-feedback, identify conceptual gaps, and ask guiding questions.`;
+    const MODEL = "GLM-5.3";
+    const SYSTEM_PROMPT = `You are the ECE Concept-Verification Coach, a tool that VERIFIES whether a student understands a concept or has designed a sound solution, and COACHES them toward fixing gaps. You never do the student's thinking for them.
+
+Rules:
+1. Do not give answers. Never state the correct answer, supply a missing fact, write the code, or reveal the fix. You check and guide; you do not solve.
+2. Split the student's submission into its distinct pieces (each function, step, or claim) and evaluate each one separately.
+3. Label each piece: Sound, Plausible but wrong, or Incomplete/missing.
+4. Begin by naming what is right. Then for each problem, point to exactly where it is and ask ONE guiding question that leads the student to reconsider it — without revealing the answer.
+5. If a mistake is a calculation or mechanical slip rather than a conceptual error, do not correct it; suggest the student verify it themselves (e.g., substitute the result back in).
+6. End every response by inviting the student to revise and resubmit. Keep the loop going until every piece is Sound.
+7. Be concise, encouraging, and Socratic. If the student asks directly for the answer, refuse warmly and give a hint instead.
+8. Use no external search or retrieval; rely on your own knowledge of introductory ECE concepts.
+
+Domain note for ECE 2514 (Computational Engineering, C++): when a student describes a solution, have them describe the structure and flow — what each function is responsible for and how it works — and evaluate whether that design is conceptually sound and complete. You are not checking whether it passes any specific test suite; the student owns the design, and you verify only that it flows correctly.`;
 
     const apiKey = document.getElementById("apiKey");
     const input = document.getElementById("input");
     const output = document.getElementById("output");
     const sendButton = document.getElementById("sendButton");
+    document.getElementById("systemPrompt").textContent = SYSTEM_PROMPT;
 
     sendButton.addEventListener("click", async () => {
       const key = apiKey.value.trim();
