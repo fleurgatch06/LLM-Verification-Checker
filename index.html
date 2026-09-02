@@ -9,14 +9,20 @@
     body { margin: 24px; font-family: Arial, sans-serif; }
     main { display: flex; gap: 20px; max-width: 1100px; }
     section { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-    textarea, #output { width: 100%; min-height: 360px; padding: 12px; font: 16px/1.4 Arial, sans-serif; border: 1px solid #999; }
+    input, textarea, #output { width: 100%; padding: 12px; font: 16px/1.4 Arial, sans-serif; border: 1px solid #999; }
+    textarea, #output { min-height: 360px; }
     #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; }
     button { width: fit-content; padding: 10px 16px; font-size: 16px; cursor: pointer; }
+    small { max-width: 1100px; display: block; margin: 0 0 18px; }
     @media (max-width: 700px) { main { flex-direction: column; } }
   </style>
 </head>
 <body>
   <h1>ECE Verification Checker</h1>
+  <label for="apiKey">Your personal ARC API key</label>
+  <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your own ARC API key">
+  <small>Your key is used only for this request and is not saved by this page.</small>
+
   <main>
     <section>
       <label for="input">Student submission</label>
@@ -25,20 +31,31 @@
     </section>
     <section>
       <label for="output">AI feedback</label>
-      <pre id="output">Submit your work to receive feedback.</pre>
+      <pre id="output">Enter your API key and submission to receive feedback.</pre>
     </section>
   </main>
 
   <script>
-    // Replace this only after deploying your backend/serverless function.
-    const BACKEND_URL = "https://YOUR-BACKEND-URL/check";
+    const ARC_URL = "https://llm-api.arc.vt.edu/api/v1/chat/completions";
+    const MODEL = "gpt-oss-120b";
+    const SYSTEM_PROMPT = `You are an ECE project-design verification checker.
+Evaluate the student's reasoning or design structure. Do not provide a final
+solution or write the student's project for them. Give concise, constructive
+feedback, identify conceptual gaps, and ask guiding questions.`;
 
+    const apiKey = document.getElementById("apiKey");
     const input = document.getElementById("input");
     const output = document.getElementById("output");
     const sendButton = document.getElementById("sendButton");
 
     sendButton.addEventListener("click", async () => {
+      const key = apiKey.value.trim();
       const studentWork = input.value.trim();
+
+      if (!key) {
+        output.textContent = "Enter your personal ARC API key first.";
+        return;
+      }
       if (!studentWork) {
         output.textContent = "Enter a submission first.";
         return;
@@ -48,18 +65,29 @@
       output.textContent = "Waiting for AI feedback...";
 
       try {
-        const response = await fetch(BACKEND_URL, {
+        const response = await fetch(ARC_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentWork })
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: studentWork }
+            ],
+            temperature: 0.3
+          })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "The backend returned an error.");
-        output.textContent = data.feedback;
+        if (!response.ok) throw new Error(data.error?.message || data.detail || "ARC returned an error.");
+        output.textContent = data.choices?.[0]?.message?.content || "ARC returned no feedback.";
       } catch (error) {
-        output.textContent = `Error: ${error.message}`;
+        output.textContent = `Error: ${error.message}\n\nIf the error mentions CORS or 'Failed to fetch,' ARC does not allow direct requests from this site; use a backend proxy instead.`;
       } finally {
+        apiKey.value = "";
         sendButton.disabled = false;
       }
     });
