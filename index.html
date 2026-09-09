@@ -6,8 +6,8 @@
   <title>ECE Verification Checker</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 24px; font-family: Arial, sans-serif; }
-    main { display: flex; gap: 20px; max-width: 1100px; }
+    body { margin: 24px; font-family: Arial, sans-serif; max-width: 1100px; }
+    main { display: flex; gap: 20px; }
     section { flex: 1; display: flex; flex-direction: column; gap: 10px; }
     input, textarea, #output { width: 100%; padding: 12px; font: 16px/1.4 Arial, sans-serif; border: 1px solid #999; }
     textarea, #output { min-height: 360px; }
@@ -24,7 +24,7 @@
   <h1>ECE Verification Checker</h1>
   <label for="apiKey">Your personal ARC API key</label>
   <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your own ARC API key">
-  <small>Your key is used only for this request and is not saved by this page.</small>
+  <small>Your key is used only for requests from this page. It stays in the field until you refresh or close the tab, and is never saved.</small>
 
   <main>
     <section>
@@ -105,7 +105,6 @@ Domain note for ECE 2514 (Computational Engineering, C++): when a student descri
       } catch (error) {
         output.textContent = `Error: ${error.message}\n\nIf the error mentions CORS or 'Failed to fetch,' ARC does not allow direct requests from this site; use a backend proxy instead.`;
       } finally {
-        apiKey.value = "";
         sendButton.disabled = false;
       }
     });
