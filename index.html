@@ -5,18 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ECE Verification Checker</title>
   <style>
+    :root {
+      --bg: #1e1e1e; --surface: #252526; --surface-2: #2d2d30; --border: #3c3c3c;
+      --text: #d4d4d4; --text-muted: #858585;
+      --accent: #0e639c; --accent-hover: #1177bb; --focus: #0078d4;
+      --font-ui: "Segoe UI", system-ui, sans-serif;
+      --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      /* reserved for the structured-verdict rendering later */
+      --sound: #4ec9b0; --plausible-wrong: #d7ba7d; --incomplete: #f14c4c;
+    }
     * { box-sizing: border-box; }
-    body { margin: 24px; font-family: Arial, sans-serif; max-width: 1100px; }
+    body { margin: 0; padding: 28px; max-width: 1100px;
+      background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-ui); }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 20px; }
+    label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: 13px; }
+    small { display: block; color: var(--text-muted); margin: 0 0 18px; }
     main { display: flex; gap: 20px; }
-    section { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-    input, textarea, #output { width: 100%; padding: 12px; font: 16px/1.4 Arial, sans-serif; border: 1px solid #999; }
+    section { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    input, textarea, #output {
+      width: 100%; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+      font: 15px/1.55 var(--font-ui);
+      transition: border-color .12s ease, box-shadow .12s ease;
+    }
+    #input { font-family: var(--font-mono); }        /* submission reads like the editor */
     textarea, #output { min-height: 360px; }
-    #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f7f7; }
-    button { width: fit-content; padding: 10px 16px; font-size: 16px; cursor: pointer; }
-    small { max-width: 1100px; display: block; margin: 0 0 18px; }
-    details { border: 1px solid #999; padding: 10px 12px; }
-    summary { cursor: pointer; font-weight: bold; }
-    #systemPrompt { margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.4 Arial, sans-serif; }
+    #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    input:focus, textarea:focus {
+      outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px rgba(14, 99, 156, .35);
+    }
+    ::placeholder { color: var(--text-muted); }
+    #sendButton {
+      width: fit-content; background: var(--accent); color: #fff; border: none;
+      border-radius: 6px; padding: 10px 20px; font: 600 15px var(--font-ui);
+      cursor: pointer; transition: background .12s ease;
+    }
+    #sendButton:hover { background: var(--accent-hover); }
+    #sendButton:disabled { background: #3a3d41; color: #888; cursor: default; }
+    #status { color: var(--text-muted); font-size: 13px; min-height: 18px; }
+    details { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+      background: var(--surface); }
+    summary { cursor: pointer; font-weight: 600; color: var(--text-muted); }
     @media (max-width: 700px) { main { flex-direction: column; } }
   </style>
 </head>
@@ -30,11 +59,15 @@
     <section>
       <label for="input">Student submission</label>
       <textarea id="input" placeholder="Describe your design, reasoning, or code structure here..."></textarea>
-      <button id="sendButton">Send to AI</button>
+      <button id="sendButton">Verify</button>
+      <div id="status"></div>
 
       <details>
-        <summary>Show system prompt</summary>
-        <pre id="systemPrompt"></pre>
+        <summary>Show system prompts</summary>
+        <small>Turn 1 — Verify (internal JSON verdict; never shown to the student)</small>
+        <pre id="verifyPrompt"></pre>
+        <small>Turn 2 — Coach (student-facing feedback)</small>
+        <pre id="coachPrompt"></pre>
       </details>
     </section>
     <section>
