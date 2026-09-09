@@ -6,13 +6,13 @@
   <title>ECE Verification Checker</title>
   <style>
     :root {
-      --bg: #1e1e1e; --surface: #252526; --surface-2: #2d2d30; --border: #3c3c3c;
-      --text: #d4d4d4; --text-muted: #858585;
-      --accent: #0e639c; --accent-hover: #1177bb; --focus: #0078d4;
+      --bg: #24273a; --surface: #363a4f; --surface-2: #494d64; --border: #5b6078;
+      --text: #cad3f5; --text-muted: #a5adcb;
+      --accent: #8aadf4; --accent-hover: #b7bdf8; --focus: #8aadf4;
       --font-ui: "Segoe UI", system-ui, sans-serif;
       --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
       /* reserved for the structured-verdict rendering later */
-      --sound: #4ec9b0; --plausible-wrong: #d7ba7d; --incomplete: #f14c4c;
+      --sound: #a6da95; --plausible-wrong: #eed49f; --incomplete: #ed8796;
     }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 28px; max-width: 1100px;
@@ -32,21 +32,36 @@
     textarea, #output { min-height: 360px; }
     #output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
     input:focus, textarea:focus {
-      outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px rgba(14, 99, 156, .35);
+      outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px rgba(138, 173, 244, .35);
     }
     ::placeholder { color: var(--text-muted); }
     #sendButton {
-      width: fit-content; background: var(--accent); color: #fff; border: none;
+      width: fit-content; background: var(--accent); color: #181926; border: none;
       border-radius: 6px; padding: 10px 20px; font: 600 15px var(--font-ui);
       cursor: pointer; transition: background .12s ease;
     }
     #sendButton:hover { background: var(--accent-hover); }
-    #sendButton:disabled { background: #3a3d41; color: #888; cursor: default; }
+    #sendButton:disabled { background: #494d64; color: #939ab7; cursor: default; }
     #status { color: var(--text-muted); font-size: 13px; min-height: 18px; }
     details { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
       background: var(--surface); }
     summary { cursor: pointer; font-weight: 600; color: var(--text-muted); }
     @media (max-width: 700px) { main { flex-direction: column; } }
+    /* understanding breakdown */
+    #breakdownBody { margin-top: 10px; display: flex; flex-direction: column; gap: 14px; }
+    .breakdown-overall { margin: 0; font-weight: 600; }
+    .breakdown-heading { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .breakdown-list { list-style: none; margin: 0; padding: 0;
+      display: flex; flex-direction: column; gap: 12px; }
+    .breakdown-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+    .breakdown-quote, .breakdown-understanding, .breakdown-statement { margin: 0; }
+    .breakdown-understanding { color: var(--text-muted); }
+    .chip { display:inline-block; font-size:12px; font-weight:600;
+      padding:2px 8px; border-radius:6px; border:1px solid currentColor; }
+    .chip-sound   { color: var(--sound); }
+    .chip-wrong   { color: var(--plausible-wrong); }
+    .chip-missing { color: var(--incomplete); }
+    .chip-muted   { color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -72,6 +87,10 @@
     </section>
     <section>
       <label for="output">AI feedback</label>
+      <details id="breakdown" open hidden>
+        <summary>How the tool read your submission</summary>
+        <div id="breakdownBody"></div>
+      </details>
       <pre id="output">Enter your API key and submission to receive feedback.</pre>
     </section>
   </main>
@@ -79,26 +98,153 @@
   <script>
     const ARC_URL = "https://llm-api.arc.vt.edu/api/v1/chat/completions";
     const MODEL = "GLM-5.3";
-    let SYSTEM_PROMPT = "";
+    let VERIFY_PROMPT = "";
+    let COACH_PROMPT = "";
 
     const apiKey = document.getElementById("apiKey");
     const input = document.getElementById("input");
     const output = document.getElementById("output");
     const sendButton = document.getElementById("sendButton");
-    const systemPromptBox = document.getElementById("systemPrompt");
+    const status = document.getElementById("status");
+    const verifyPromptBox = document.getElementById("verifyPrompt");
+    const coachPromptBox = document.getElementById("coachPrompt");
+    const breakdown = document.getElementById("breakdown");
+    const breakdownBody = document.getElementById("breakdownBody");
 
-    fetch("system-prompt.txt")
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    Promise.all([
+      fetch("verify-prompt.txt").then((response) => {
+        if (!response.ok) throw new Error(`verify-prompt.txt: HTTP ${response.status}`);
+        return response.text();
+      }),
+      fetch("coach-prompt.txt").then((response) => {
+        if (!response.ok) throw new Error(`coach-prompt.txt: HTTP ${response.status}`);
         return response.text();
       })
-      .then((text) => {
-        SYSTEM_PROMPT = text.trim();
-        systemPromptBox.textContent = SYSTEM_PROMPT;
+    ])
+      .then(([verifyText, coachText]) => {
+        VERIFY_PROMPT = verifyText.trim();
+        COACH_PROMPT = coachText.trim();
+        verifyPromptBox.textContent = VERIFY_PROMPT;
+        coachPromptBox.textContent = COACH_PROMPT;
       })
       .catch((error) => {
-        systemPromptBox.textContent = `Could not load system-prompt.txt: ${error.message}`;
+        verifyPromptBox.textContent = `Could not load prompt files: ${error.message}`;
+        coachPromptBox.textContent = `Could not load prompt files: ${error.message}`;
       });
+
+    async function callModel(key, messages, { temperature = 0.2, jsonMode = false } = {}) {
+      const body = { model: MODEL, messages, temperature };
+      if (jsonMode) body.response_format = { type: "json_object" }; // if ARC errors on response_format, delete this line
+      const response = await fetch(ARC_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${key}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(`ARC ${response.status}: ${await response.text()}`);
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+
+    function extractJson(text) {
+      // tolerate ```json fences or stray prose: grab the outermost { ... }
+      const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+      const start = cleaned.indexOf("{"), end = cleaned.lastIndexOf("}");
+      if (start === -1 || end === -1) throw new Error("No JSON object found in Turn 1 output");
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+
+    // Render the Turn 1 verdict as "How the tool read your submission".
+    // verdict_reason, issue_tag and relates_to stay internal and are never rendered.
+    const ASSESSMENT_CHIPS = {
+      sound: ["Sound", "chip-sound"],
+      plausible_but_wrong: ["Needs another look", "chip-wrong"],
+      irrelevant: ["Not relevant", "chip-muted"]
+    };
+    const STATUS_CHIPS = {
+      satisfied: ["Covered", "chip-sound"],
+      missing: ["Missing", "chip-missing"],
+      contradicted: ["Contradicted", "chip-wrong"]
+    };
+    const OVERALL_LABELS = {
+      sound: ["Sound", "chip-sound"],
+      unsound: ["Unsound", "chip-wrong"],
+      incomplete: ["Incomplete", "chip-missing"]
+    };
+
+    function makeChip(map, key) {
+      const [label, colorClass] = map[key] || [String(key || "Unknown"), "chip-muted"];
+      const chip = document.createElement("span");
+      chip.className = `chip ${colorClass}`;
+      chip.textContent = label;
+      return chip;
+    }
+
+    function renderBreakdown(verdict) {
+      verdict = verdict && typeof verdict === "object" ? verdict : {};
+      breakdownBody.textContent = "";
+
+      // 1. overall verdict line, colored by overall_verdict
+      const [overallLabel, overallClass] =
+        OVERALL_LABELS[verdict.overall_verdict] || [verdict.overall_verdict || "Unknown", "chip-muted"];
+      const overall = document.createElement("p");
+      overall.className = `breakdown-overall ${overallClass}`;
+      overall.textContent = `Overall: ${overallLabel}`;
+      breakdownBody.appendChild(overall);
+
+      // 2. the submission, clause by clause
+      const claims = Array.isArray(verdict.student_claims) ? verdict.student_claims : [];
+      if (claims.length > 0) {
+        const heading = document.createElement("p");
+        heading.className = "breakdown-heading";
+        heading.textContent = "Your submission, clause by clause";
+        const list = document.createElement("ul");
+        list.className = "breakdown-list";
+        for (const claim of claims) {
+          const item = document.createElement("li");
+          const quote = document.createElement("p");
+          quote.className = "breakdown-quote";
+          quote.textContent = claim && claim.quote ? String(claim.quote) : "";
+          item.appendChild(quote);
+          // older verdicts may lack `understanding`; then show quote + chip only
+          if (claim && typeof claim.understanding === "string" && claim.understanding.trim()) {
+            const understanding = document.createElement("p");
+            understanding.className = "breakdown-understanding";
+            understanding.textContent = claim.understanding;
+            item.appendChild(understanding);
+          }
+          item.appendChild(makeChip(ASSESSMENT_CHIPS, claim && claim.assessment));
+          list.appendChild(item);
+        }
+        breakdownBody.appendChild(heading);
+        breakdownBody.appendChild(list);
+      }
+
+      // 3. essential ideas for the concept and their coverage
+      const requirements = Array.isArray(verdict.requirements_checked) ? verdict.requirements_checked : [];
+      if (requirements.length > 0) {
+        const heading = document.createElement("p");
+        heading.className = "breakdown-heading";
+        heading.textContent = "Essential ideas for this concept";
+        const list = document.createElement("ul");
+        list.className = "breakdown-list";
+        for (const requirement of requirements) {
+          const item = document.createElement("li");
+          const statement = document.createElement("p");
+          statement.className = "breakdown-statement";
+          statement.textContent = requirement && requirement.statement ? String(requirement.statement) : "";
+          item.appendChild(statement);
+          item.appendChild(makeChip(STATUS_CHIPS, requirement && requirement.status));
+          list.appendChild(item);
+        }
+        breakdownBody.appendChild(heading);
+        breakdownBody.appendChild(list);
+      }
+
+      breakdown.hidden = false;
+    }
 
     sendButton.addEventListener("click", async () => {
       const key = apiKey.value.trim();
@@ -112,37 +258,44 @@
         output.textContent = "Enter a submission first.";
         return;
       }
-      if (!SYSTEM_PROMPT) {
-        output.textContent = "System prompt is still loading. If this persists, make sure system-prompt.txt sits next to index.html and that you are viewing the page through Live Server, not by double-clicking the file.";
+      if (!VERIFY_PROMPT || !COACH_PROMPT) {
+        output.textContent = "Prompts are still loading. If this persists, make sure verify-prompt.txt and coach-prompt.txt sit next to index.html and that you are viewing the page through Live Server, not by double-clicking the file.";
         return;
       }
 
       sendButton.disabled = true;
-      output.textContent = "Waiting for AI feedback...";
 
       try {
-        const response = await fetch(ARC_URL, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${key}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: studentWork }
-            ],
-            temperature: 0.3
-          })
-        });
+        // ---- Turn 1: VERIFY (internal; never shown to the student) ----
+        status.textContent = "Verifying…";
+        const rawVerdict = await callModel(key, [
+          { role: "system", content: VERIFY_PROMPT },
+          { role: "user", content: studentWork }
+        ], { temperature: 0.1, jsonMode: true });
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error?.message || data.detail || "ARC returned an error.");
-        output.textContent = data.choices?.[0]?.message?.content || "ARC returned no feedback.";
+        let verdict;
+        try {
+          verdict = extractJson(rawVerdict);
+        } catch (parseError) {
+          console.error("Turn 1 raw output:", rawVerdict);
+          throw new Error("Verification did not return valid JSON.");
+        }
+        console.log("VERDICT:", verdict); // future telemetry hook
+        renderBreakdown(verdict);
+
+        // ---- Turn 2: COACH (the only thing the student sees) ----
+        status.textContent = "Writing feedback…";
+        const feedback = await callModel(key, [
+          { role: "system", content: COACH_PROMPT },
+          { role: "user", content: `STUDENT SUBMISSION:\n${studentWork}\n\nVERDICT (internal, do not reveal):\n${JSON.stringify(verdict)}` }
+        ], { temperature: 0.4 });
+
+        output.textContent = feedback;
       } catch (error) {
         output.textContent = `Error: ${error.message}\n\nIf the error mentions CORS or 'Failed to fetch,' ARC does not allow direct requests from this site; use a backend proxy instead.`;
+        console.error(error);
       } finally {
+        status.textContent = "";
         sendButton.disabled = false;
       }
     });

@@ -9,6 +9,9 @@ Principles:
   approach for failing to match an "expected" one.
 - Split the student's submission into its distinct pieces (each function, step, or claim) and
   judge each one separately.
+- For each clause, understanding restates what the student expressed, in neutral terms. It
+  must NOT add the correct fact, supply the missing idea, or correct the clause. It only
+  mirrors how the clause was read.
 - Identify the essential requirements a correct understanding of this concept must contain,
   and mark whether the student covered each (satisfied), got it wrong (contradicted), or
   omitted it (missing). State each requirement as the TOPIC or property to understand, not the
@@ -35,6 +38,7 @@ Schema:
   ],
   "student_claims": [
     { "quote": "short quote or paraphrase of one distinct piece the student wrote",
+      "understanding": "one plain sentence restating what this clause expresses, in your own words, mirroring the student's meaning",
       "assessment": "sound | plausible_but_wrong | irrelevant",
       "relates_to": "R1",
       "issue_tag": "short label of the misconception if wrong; empty string otherwise" }

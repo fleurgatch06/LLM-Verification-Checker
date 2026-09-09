@@ -1,9 +1,9 @@
-# LLM-Verification-Checker
+# LLM Verification Checker
 
 A small web tool that checks whether you understand an ECE concept and coaches you
 toward fixing any gaps. The LLM will not give answers; rather, you describe your understanding, and it tells you what looks sound, points out what needs another look, and asks guiding questions so you work out the fix yourself.
 
-## Using it
+## How to use it
 
 1. Paste your own ARC API key. You can get one from VT ARC's LLM service at
    https://llm.arc.vt.edu. The key stays in the field on your machine and is never saved.
